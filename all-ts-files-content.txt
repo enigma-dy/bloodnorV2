@@ -1,0 +1,491 @@
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\app.controller.ts
+
+import { Controller, Get } from '@nestjs/common';
+import { AppService } from './app.service';
+
+@Controller()
+export class AppController {
+  constructor(private readonly appService: AppService) {}
+
+  @Get()
+  getHello(): string {
+    return this.appService.getHello();
+  }
+}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\app.module.ts
+
+import { Module } from '@nestjs/common';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { PrismaModule } from './prisma/prisma.module';
+import { AuthService } from './auth/service/auth.service';
+import { AuthModule } from './auth/module/auth.module';
+import { UserModules } from './users/module/user.module';
+import { BloodTypeModule } from './blood-type/module/blood-type.module';
+import { JwtModule } from '@nestjs/jwt';
+
+@Module({
+  imports: [PrismaModule, AuthModule, UserModules, BloodTypeModule, JwtModule],
+  controllers: [AppController],
+  providers: [AppService, AuthService],
+})
+export class AppModule {}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\app.service.ts
+
+import { Injectable } from '@nestjs/common';
+
+@Injectable()
+export class AppService {
+  getHello(): string {
+    return 'Hello World!';
+  }
+}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\main.ts
+
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { ValidationPipe } from '@nestjs/common';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  await app.listen(process.env.PORT ?? 3000);
+}
+bootstrap();
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\controller\auth.controller.spec.ts
+
+import { Test, TestingModule } from '@nestjs/testing';
+import { AuthController } from './auth.controller';
+
+describe('AuthController', () => {
+  let controller: AuthController;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [AuthController],
+    }).compile();
+
+    controller = module.get<AuthController>(AuthController);
+  });
+
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
+  });
+});
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\controller\auth.controller.ts
+
+import { Body, Controller, Post } from '@nestjs/common';
+import { AuthService } from '../service/auth.service';
+import { LoginUserDto } from 'src/users/dto/user.dto';
+
+@Controller('auth')
+export class AuthController {
+  constructor(private readonly authService: AuthService) {}
+
+  @Post('login')
+  async login(@Body() body: LoginUserDto) {
+    return this.authService.login(body.email, body.password);
+  }
+}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\gauards\jwt-auth.guard.ts
+
+import { Injectable } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+
+@Injectable()
+export class JwtAuthGuard extends AuthGuard('jwt') {}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\module\auth.module.ts
+
+import { Module } from '@nestjs/common';
+import { AuthService } from '../service/auth.service';
+import { AuthController } from '../controller/auth.controller';
+import { JwtModule, JwtService } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { JwtAuthGuard } from '../gauards/jwt-auth.guard';
+
+@Module({
+  imports: [
+    PassportModule,
+    JwtModule.register({
+      secret: 'your-strong-secret-key-here-at-least-32-characters',
+      signOptions: { expiresIn: '1d' },
+    }),
+  ],
+  providers: [AuthService, JwtAuthGuard],
+  controllers: [AuthController],
+  exports: [AuthService, JwtAuthGuard],
+})
+export class AuthModule {}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\service\auth.service.spec.ts
+
+import { Test, TestingModule } from '@nestjs/testing';
+import { AuthService } from './auth.service';
+
+describe('AuthService', () => {
+  let service: AuthService;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [AuthService],
+    }).compile();
+
+    service = module.get<AuthService>(AuthService);
+  });
+
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+});
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\service\auth.service.ts
+
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { PrismaService } from 'src/prisma/prisma.service';
+import * as bcrypt from 'bcrypt';
+import { JwtService } from '@nestjs/jwt';
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwt: JwtService,
+  ) {}
+
+  async verifyUser(email: string, password: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (user && (await bcrypt.compare(password, user.password))) {
+      return user;
+    }
+
+    return null;
+  }
+
+  async login(email: string, password: string) {
+    const user = await this.verifyUser(email, password);
+    if (!user) {
+      throw new BadRequestException('Invalid credentials');
+    }
+
+    const payload = { sub: user.id, email: user.email };
+    const token = this.jwt.sign(payload);
+    return {
+      message: 'Login successful',
+      token,
+    };
+  }
+}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\strategy\jwt.stratey.ts
+
+import { Injectable } from '@nestjs/common';
+import { PassportStrategy } from '@nestjs/passport';
+import { ExtractJwt, Strategy } from 'passport-jwt';
+
+@Injectable()
+export class JwtStrategy extends PassportStrategy(Strategy) {
+  constructor() {
+    super({
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      secretOrKey: 'your-strong-secret-key-here-at-least-32-characters',
+      ignoreExpiration: false,
+    });
+  }
+
+  async validate(payload: any) {
+    return { userId: payload.sub, email: payload.email };
+  }
+}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\blood-type\controller\blood-type.controller.ts
+
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
+import { BloodTypeService } from '../service/blood-type.service';
+import { BloodGroupDto } from '../dto/blood-type.dto';
+import { JwtAuthGuard } from 'src/auth/gauards/jwt-auth.guard';
+
+@Controller('blood-type')
+export class BloodTypeController {
+  constructor(private readonly bloodType: BloodTypeService) {}
+
+  @Post('create')
+  @Post('create')
+  async createBlood(@Body() body: BloodGroupDto) {
+    try {
+      return await this.bloodType.createBlood(body.type);
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('secure')
+  getSecureData(@Request() req) {
+    return { message: 'This is protected', user: req.user };
+  }
+}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\blood-type\dto\blood-type.dto.ts
+
+import { IsEmail } from 'class-validator';
+
+export class BloodGroupDto {
+  type: string;
+}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\blood-type\module\blood-type.module.ts
+
+import { Module } from '@nestjs/common';
+import { BloodTypeService } from '../service/blood-type.service';
+import { BloodTypeController } from '../controller/blood-type.controller';
+
+@Module({
+  providers: [BloodTypeService],
+  controllers: [BloodTypeController],
+  exports: [BloodTypeService],
+})
+export class BloodTypeModule {}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\blood-type\service\blood-type.service.ts
+
+import { HttpStatus, Injectable, BadRequestException } from '@nestjs/common';
+import { PrismaService } from 'src/prisma/prisma.service';
+
+@Injectable()
+export class BloodTypeService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async createBlood(bloodType: string) {
+    const existing = await this.prisma.bloodGroup.findFirst({
+      where: { bloodType: bloodType },
+    });
+
+    if (existing) {
+      throw new BadRequestException('Blood type already exists');
+    }
+
+    await this.prisma.bloodGroup.create({
+      data: { bloodType: bloodType },
+    });
+
+    return { status: HttpStatus.CREATED, message: 'Blood type created' };
+  }
+}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\prisma\prisma.module.ts
+
+import { Global, Module } from "@nestjs/common";
+import { PrismaService } from "./prisma.service";
+
+@Global()
+@Module({
+    providers:[PrismaService],
+    exports:[PrismaService]
+})
+export class PrismaModule{}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\prisma\prisma.service.ts
+
+import { INestApplication, Injectable, OnModuleInit } from '@nestjs/common';
+import { PrismaClient } from 'generated/prisma'; // Your custom Prisma client
+
+@Injectable()
+export class PrismaService extends PrismaClient implements OnModuleInit {
+  async onModuleInit() {
+    await this.$connect();
+  }
+
+  async enableShutdownHooks(app: INestApplication) {
+    process.on('beforeExit', async () => {
+      await app.close();
+    });
+
+    this.$on('beforeExit' as never, async () => {
+      await app.close();
+    });
+  }
+}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\users\controller\users.controller.spec.ts
+
+import { Test, TestingModule } from '@nestjs/testing';
+import { UsersController } from './users.controller';
+
+describe('UsersController', () => {
+  let controller: UsersController;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [UsersController],
+    }).compile();
+
+    controller = module.get<UsersController>(UsersController);
+  });
+
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
+  });
+});
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\users\controller\users.controller.ts
+
+import { Body, Controller, HttpStatus, Post } from '@nestjs/common';
+import { UserService } from '../service/user.service';
+import { CreateUserDto } from '../dto/user.dto';
+
+@Controller('users')
+export class UsersController {
+  constructor(private readonly userService: UserService) {}
+
+  @Post('register')
+  async register(@Body() body: CreateUserDto) {
+    try {
+      const user = await this.userService.registerUser(body);
+      return {
+        status: HttpStatus.CREATED,
+        message: 'User Registration Successful',
+      };
+    } catch (error) {
+      return {
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: error.message || 'An error occurred during registration',
+      };
+    }
+  }
+}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\users\dto\user.dto.ts
+
+import { IsEmail, IsInt, IsNumber, IsString } from 'class-validator';
+
+export class CreateUserDto {
+  @IsString()
+  firstName: string;
+  @IsString()
+  lastName: string;
+  @IsString()
+  phoneNumber: string;
+  @IsEmail()
+  email: string;
+  @IsString()
+  password: string;
+  @IsString()
+  address: string;
+  @IsInt()
+  age: number;
+  @IsString()
+  bloodType: string;
+  @IsString()
+  country: string;
+  @IsInt()
+  postalCode: number;
+}
+
+export class LoginUserDto {
+  @IsEmail()
+  email: string;
+  @IsString()
+  password: string;
+}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\users\mapper\user.mapper.ts
+
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\users\module\user.module.ts
+
+import { Module } from '@nestjs/common';
+import { UserService } from '../service/user.service';
+import { UsersController } from '../controller/users.controller';
+
+@Module({
+  providers: [UserService],
+  controllers: [UsersController],
+  exports: [UserService],
+})
+export class UserModules {}
+
+
+# File: C:\Users\Enigma\Downloads\BloodDonor Server\src\users\service\user.service.ts
+
+import { PrismaService } from 'src/prisma/prisma.service';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { CreateUserDto } from '../dto/user.dto';
+import * as bcrypt from 'bcrypt';
+
+@Injectable()
+export class UserService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async registerUser(body: CreateUserDto) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: body.email },
+    });
+
+    if (existingUser) {
+      throw new BadRequestException('User already exists');
+    }
+
+    const bloodGroupExists = await this.prisma.bloodGroup.findUnique({
+      where: { bloodType: body.bloodType },
+    });
+
+    if (!bloodGroupExists) {
+      throw new BadRequestException('Invalid blood group ID');
+    }
+
+    const hashPass = await bcrypt.hash(body.password, 10);
+
+    const { bloodType, ...userData } = body;
+    const newUser = await this.prisma.user.create({
+      data: {
+        ...userData,
+        password: hashPass,
+        bloodGroupId: bloodGroupExists.id,
+      },
+    });
+
+    const { email, password } = newUser;
+    return { email, password };
+  }
+}

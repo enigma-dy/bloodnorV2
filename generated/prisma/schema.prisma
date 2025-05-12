@@ -1,0 +1,30 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int        @id @default(autoincrement())
+  firstName    String
+  lastName     String
+  phoneNumber  String
+  email        String     @unique
+  password     String
+  address      String
+  age          Int
+  bloodGroup   BloodGroup @relation(fields: [bloodGroupId], references: [id])
+  bloodGroupId Int
+  country      String
+  postalCode   Int
+}
+
+model BloodGroup {
+  id        Int    @id @default(autoincrement())
+  bloodType String @unique
+  user      User[]
+}

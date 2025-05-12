@@ -1,0 +1,50 @@
+POST http://localhost:3000/users/register
+Content-Type: application/json
+
+{
+  "firstName": "John",
+  "lastName": "Doe",
+  "phoneNumber": "1234567890",
+  "email": "john7@example.com",
+  "password": "secret123",
+  "address": "123 Street",
+  "age": 30,
+  "bloodType": "O+",
+  "country": "USA",
+  "postalCode": 12345
+}
+
+####
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "email": "john6@example.com",
+  "password": "secret123"
+}
+
+### Test creating a new blood type
+POST http://localhost:3000/blood-type/create
+Content-Type: application/json
+
+{
+  "type": "O+"
+}
+
+### Test creating a duplicate blood type (should fail)
+POST http://localhost:3000/blood-type/create
+Content-Type: application/json
+
+{
+  "type": "O+" 
+}
+
+######
+POST http://localhost:3000/blood-type/create
+Content-Type: application/json
+
+######
+### Secure Route Test
+GET http://localhost:3000/blood-type/secure
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjcsImVtYWlsIjoiam9objZAZXhhbXBsZS5jb20iLCJpYXQiOjE3NDcwMTAxOTMsImV4cCI6MTc0NzA5NjU5M30.9s5nSWTCl_irk1H5nSYEodbYZDGLiANqNfqINiLfxUU
+Content-Type: application/json
