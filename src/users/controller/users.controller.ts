@@ -21,4 +21,8 @@ export class UsersController {
       };
     }
   }
+
+  async findUserById(email: string) {
+    let user = await this.userService.findUserByEmail(email);
+  }
 }

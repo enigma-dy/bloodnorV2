@@ -5,7 +5,6 @@ import {
   Get,
   Post,
   UseGuards,
-  Request,
 } from '@nestjs/common';
 import { BloodTypeService } from '../service/blood-type.service';
 import { BloodGroupDto } from '../dto/blood-type.dto';
