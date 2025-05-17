@@ -15,18 +15,11 @@ export class BloodTypeController {
   constructor(private readonly bloodType: BloodTypeService) {}
 
   @Post('create')
-  @Post('create')
   async createBlood(@Body() body: BloodGroupDto) {
     try {
-      return await this.bloodType.createBlood(body.type);
+      return await this.bloodType.createBloodType(body.type);
     } catch (error) {
       throw new BadRequestException(error.message);
     }
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get('secure')
-  getSecureData() {
-    return { message: 'You have access!' };
   }
 }

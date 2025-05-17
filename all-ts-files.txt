@@ -1,0 +1,2066 @@
+﻿==== C:\Users\Enigma\Downloads\BloodDonor Server\src\app.controller.ts ====
+import { Controller, Get } from '@nestjs/common';
+import { AppService } from './app.service';
+
+@Controller()
+export class AppController {
+  constructor(private readonly appService: AppService) {}
+
+  @Get()
+  getHello(): string {
+    return this.appService.getHello();
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\app.module.ts ====
+import { Module } from '@nestjs/common';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { PrismaModule } from './prisma/prisma.module';
+import { AuthService } from './auth/service/auth.service';
+import { AuthModule } from './auth/module/auth.module';
+import { UserModules } from './users/module/user.module';
+import { BloodTypeModule } from './blood-type/module/blood-type.module';
+import { JwtModule } from '@nestjs/jwt';
+import { RoleModule } from './role/role.modules';
+import { PermissionModule } from './permission/permission.modules';
+import { NotificationModule } from './notification/notification.module';
+import { HospitalModule } from './hospital/module/hospital.module';
+import { BloodBankModule } from './blood-bank/blood-bank.module';
+
+@Module({
+  imports: [
+    PrismaModule,
+    AuthModule,
+    UserModules,
+    BloodTypeModule,
+    JwtModule,
+    RoleModule,
+    PermissionModule,
+    NotificationModule,
+    HospitalModule,
+    BloodBankModule,
+  ],
+  controllers: [AppController],
+  providers: [AppService, AuthService],
+})
+export class AppModule {}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\app.service.ts ====
+import { Injectable } from '@nestjs/common';
+
+@Injectable()
+export class AppService {
+  getHello(): string {
+    return 'Hello World!';
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\main.ts ====
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { ValidationPipe } from '@nestjs/common';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  await app.listen(process.env.PORT ?? 3000);
+}
+bootstrap();
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\controller\auth.controller.spec.ts ====
+import { Test, TestingModule } from '@nestjs/testing';
+import { AuthController } from './auth.controller';
+
+describe('AuthController', () => {
+  let controller: AuthController;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [AuthController],
+    }).compile();
+
+    controller = module.get<AuthController>(AuthController);
+  });
+
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
+  });
+});
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\controller\auth.controller.ts ====
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { AuthService } from '../service/auth.service';
+import { LoginUserDto } from 'src/users/dto/user.dto';
+import { AuthGuard } from '@nestjs/passport';
+import { UserService } from 'src/users/service/user.service';
+import { JwtService } from '@nestjs/jwt';
+import { UserType } from 'generated/prisma';
+
+@Controller('auth')
+export class AuthController {
+  constructor(
+    private readonly authService: AuthService,
+    private readonly userService: UserService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  @Post('login')
+  async login(@Body() body: LoginUserDto) {
+    return this.authService.login(body.email, body.password);
+  }
+
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  async googleAuth() {}
+
+  @Get('google/redirect')
+  @UseGuards(AuthGuard('google'))
+  async googleAuthRedirect(@Req() req) {
+    const { email, firstName, lastName } = req.user;
+
+    let user = await this.userService.findUserByEmail(email);
+
+    if (!user) {
+      user = await this.userService.registerUser({
+        email,
+        firstName,
+        lastName,
+        phoneNumber: '',
+        password: '',
+        address: '',
+        age: 0,
+        userType: UserType.DONOR,
+        bloodType: 'O+',
+        country: '',
+        postalCode: 0,
+        lastDonationDate: new Date(),
+      });
+    }
+
+    const payload = { sub: user.id, email: user.email };
+    const token = this.jwtService.sign(payload);
+
+    return {
+      message: 'Google Login Successful',
+      token,
+      user,
+    };
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\dto\auth.dto.ts ====
+import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+
+export class LoginUserDto {
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @IsString()
+  @IsNotEmpty()
+  password: string;
+}
+
+export class LoginHospitalDto {
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @IsString()
+  @IsNotEmpty()
+  password: string;
+}
+
+export class VerifyUserDto {
+  @IsString()
+  @IsNotEmpty()
+  token: string;
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\dto\google-strategy.dto.ts ====
+import { IsEmail, IsString } from 'class-validator';
+
+export class GoogleUserDto {
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  firstName: string;
+
+  @IsString()
+  lastName: string;
+}
+
+export interface AuthenticatedRequest extends Request {
+  user: {
+    userId: string;
+    email: string;
+  };
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\gauards\jwt-auth.guard.ts ====
+import { Injectable, ExecutionContext } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { Reflector } from '@nestjs/core';
+import { IS_PUBLIC_KEY } from '../strategy/public-strategy';
+
+@Injectable()
+export class JwtAuthGuard extends AuthGuard('jwt') {
+  constructor(private reflector: Reflector) {
+    super();
+  }
+
+  canActivate(context: ExecutionContext) {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (isPublic) {
+      return true;
+    }
+
+    return super.canActivate(context);
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\module\auth.module.ts ====
+import { Module } from '@nestjs/common';
+import { PassportModule } from '@nestjs/passport';
+import { JwtModule } from '@nestjs/jwt';
+import { JwtStrategy } from '../strategy/jwt.strategy';
+import { AuthService } from '../service/auth.service';
+import { AuthController } from '../controller/auth.controller';
+import { GoogleStrategy } from '../strategy/google.strategy';
+import { UserModules } from 'src/users/module/user.module';
+
+@Module({
+  imports: [
+    PassportModule,
+    UserModules,
+    JwtModule.register({
+      secret: process.env.JWT_SECRET,
+      signOptions: { expiresIn: '1d' },
+    }),
+  ],
+  providers: [AuthService, JwtStrategy, GoogleStrategy],
+  controllers: [AuthController],
+  exports: [JwtModule],
+})
+export class AuthModule {}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\service\auth.service.ts ====
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { PrismaService } from 'src/prisma/prisma.service';
+import * as bcrypt from 'bcrypt';
+import { JwtService } from '@nestjs/jwt';
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwt: JwtService,
+  ) {}
+
+  async verifyUser(email: string, password: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (user && (await bcrypt.compare(password, user.password))) {
+      return user;
+    }
+
+    return null;
+  }
+
+  async login(email: string, password: string) {
+    const user = await this.verifyUser(email, password);
+    if (!user) {
+      throw new BadRequestException('Invalid credentials');
+    }
+
+    const payload = { sub: user.id, email: user.email };
+    const token = this.jwt.sign(payload);
+    return {
+      message: 'Login successful',
+      token,
+    };
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\strategy\google.strategy.ts ====
+import { PassportStrategy } from '@nestjs/passport';
+import { Injectable } from '@nestjs/common';
+import { Strategy, VerifyCallback } from 'passport-google-oauth20';
+
+@Injectable()
+export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
+  constructor() {
+    super({
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: process.env.CALL_BACK_URL,
+      scope: ['email', 'profile'],
+    });
+  }
+
+  async validate(
+    accessToken: string,
+    refreshToken: string,
+    profile: any,
+    done: VerifyCallback,
+  ): Promise<any> {
+    const { name, emails, photos } = profile;
+    const user = {
+      email: emails[0].value,
+      firstName: name.givenName,
+      lastName: name.familyName,
+      picture: photos[0].value,
+      accessToken,
+    };
+    done(null, user);
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\strategy\jwt.strategy.ts ====
+import { Injectable } from '@nestjs/common';
+import { PassportStrategy } from '@nestjs/passport';
+import { ExtractJwt, Strategy } from 'passport-jwt';
+
+@Injectable()
+export class JwtStrategy extends PassportStrategy(Strategy) {
+  constructor() {
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET is not defined in environment variables');
+    }
+
+    super({
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ignoreExpiration: false,
+      secretOrKey: process.env.JWT_SECRET,
+    });
+  }
+
+  async validate(payload: any) {
+    return { userId: payload.sub, email: payload.email };
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\auth\strategy\public-strategy.ts ====
+import { SetMetadata } from '@nestjs/common';
+export const IS_PUBLIC_KEY = 'isPublic';
+export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\blood-bank\blood-bank.controller.ts ====
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
+import { CreateBloodBankDto, UpdateBloodBankDto } from './dto/blood-bank.dto';
+import { BloodBankService } from './blood-bank.service';
+
+@Controller('blood-bank')
+export class BloodBankController {
+  constructor(private readonly bloodBankService: BloodBankService) {}
+
+  @Post('create')
+  async createBloodBank(@Body() createBloodBankDto: CreateBloodBankDto) {
+    try {
+      return await this.bloodBankService.createBloodBank(createBloodBankDto);
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Get('get/:id')
+  async getBloodBank(@Param('id') id: string) {
+    try {
+      const bloodBank = await this.bloodBankService.getBloodBankById(id);
+      if (!bloodBank) {
+        throw new HttpException('Blood bank not found', HttpStatus.NOT_FOUND);
+      }
+      return bloodBank;
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Get('all')
+  async getAllBloodBanks(@Query('hospitalId') hospitalId?: string) {
+    try {
+      return await this.bloodBankService.getAllBloodBanks(hospitalId);
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Patch('update/:id')
+  async updateBloodBank(
+    @Param('id') id: string,
+    @Body() updateBloodBankDto: UpdateBloodBankDto,
+  ) {
+    try {
+      return await this.bloodBankService.updateBloodBank(
+        id,
+        updateBloodBankDto,
+      );
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Delete('delete/:id')
+  async deleteBloodBank(@Param('id') id: string) {
+    try {
+      await this.bloodBankService.deleteBloodBank(id);
+      return { statusCode: HttpStatus.NO_CONTENT };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Get('by-hospital/:hospitalId')
+  async getBloodBanksByHospital(@Param('hospitalId') hospitalId: string) {
+    try {
+      return await this.bloodBankService.getBloodBanksByHospital(hospitalId);
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\blood-bank\blood-bank.module.ts ====
+import { Module } from '@nestjs/common';
+import { BloodBankController } from './blood-bank.controller';
+import { BloodBankService } from './blood-bank.service';
+
+@Module({
+  providers: [BloodBankService],
+  controllers: [BloodBankController],
+})
+export class BloodBankModule {}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\blood-bank\blood-bank.service.ts ====
+import { PrismaService } from 'src/prisma/prisma.service';
+import { CreateBloodBankDto, UpdateBloodBankDto } from './dto/blood-bank.dto';
+
+export class BloodBankService {
+  constructor(private readonly prisma: PrismaService) {}
+  async createBloodBank(createBloodBankDto: CreateBloodBankDto) {
+    const { name, address, hospitalId, phoneNumber } = createBloodBankDto;
+
+    // Check if hospital exists
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id: hospitalId },
+    });
+
+    if (!hospital) {
+      throw new Error('Hospital not found');
+    }
+
+    // Check if blood bank with same name already exists
+    const existingBloodBank = await this.prisma.bloodBank.findFirst({
+      where: { name },
+    });
+
+    if (existingBloodBank) {
+      throw new Error('Blood bank with this name already exists');
+    }
+
+    return this.prisma.bloodBank.create({
+      data: {
+        name,
+        address,
+        hospital: { connect: { id: hospitalId } },
+        phoneNumber,
+      },
+      include: {
+        hospital: true,
+      },
+    });
+  }
+
+  async getBloodBankById(id: string) {
+    return this.prisma.bloodBank.findUnique({
+      where: { id },
+      include: {
+        hospital: true,
+      },
+    });
+  }
+
+  async getAllBloodBanks(hospitalId?: string) {
+    const where = hospitalId ? { hospitalId } : {};
+    return this.prisma.bloodBank.findMany({
+      where,
+      include: {
+        hospital: true,
+      },
+    });
+  }
+
+  async updateBloodBank(id: string, updateBloodBankDto: UpdateBloodBankDto) {
+    const { name, address, phoneNumber } = updateBloodBankDto;
+
+    const bloodBank = await this.prisma.bloodBank.findUnique({
+      where: { id },
+    });
+
+    if (!bloodBank) {
+      throw new Error('Blood bank not found');
+    }
+
+    // Check if blood bank with same name already exists
+    if (name && name !== bloodBank.name) {
+      const existingBloodBank = await this.prisma.bloodBank.findFirst({
+        where: {
+          name,
+          NOT: { id },
+        },
+      });
+
+      if (existingBloodBank) {
+        throw new Error('Blood bank with this name already exists');
+      }
+    }
+
+    return this.prisma.bloodBank.update({
+      where: { id },
+      data: {
+        name,
+        address,
+        phoneNumber,
+      },
+      include: {
+        hospital: true,
+      },
+    });
+  }
+
+  async deleteBloodBank(id: string) {
+    const bloodBank = await this.prisma.bloodBank.findUnique({
+      where: { id },
+    });
+
+    if (!bloodBank) {
+      throw new Error('Blood bank not found');
+    }
+
+    return this.prisma.bloodBank.delete({
+      where: { id },
+    });
+  }
+
+  async getBloodBanksByHospital(hospitalId: string) {
+    // Check if hospital exists
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id: hospitalId },
+    });
+
+    if (!hospital) {
+      throw new Error('Hospital not found');
+    }
+
+    return this.prisma.bloodBank.findMany({
+      where: { hospitalId },
+      include: {
+        hospital: true,
+      },
+    });
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\blood-bank\dto\blood-bank.dto.ts ====
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+
+export class CreateBloodBankDto {
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsString()
+  @IsNotEmpty()
+  address: string;
+
+  @IsString()
+  @IsNotEmpty()
+  hospitalId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  phoneNumber: string;
+}
+
+export class UpdateBloodBankDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @IsOptional()
+  @IsString()
+  hospitalId?: string;
+
+  @IsOptional()
+  @IsString()
+  phoneNumber?: string;
+}
+
+export class BloodBankResponseDto {
+  id: string;
+  name: string;
+  address: string;
+  hospitalId: string;
+  phoneNumber: string;
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\blood-type\controller\blood-type.controller.ts ====
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { BloodTypeService } from '../service/blood-type.service';
+import { BloodGroupDto } from '../dto/blood-type.dto';
+import { JwtAuthGuard } from 'src/auth/gauards/jwt-auth.guard';
+
+@Controller('blood-type')
+export class BloodTypeController {
+  constructor(private readonly bloodType: BloodTypeService) {}
+
+  @Post('create')
+  async createBlood(@Body() body: BloodGroupDto) {
+    try {
+      return await this.bloodType.createBloodType(body.type);
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\blood-type\dto\blood-type.dto.ts ====
+import { IsString } from 'class-validator';
+
+export class BloodGroupDto {
+  @IsString()
+  type: string;
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\blood-type\module\blood-type.module.ts ====
+import { Module } from '@nestjs/common';
+import { BloodTypeService } from '../service/blood-type.service';
+import { BloodTypeController } from '../controller/blood-type.controller';
+
+@Module({
+  providers: [BloodTypeService],
+  controllers: [BloodTypeController],
+  exports: [BloodTypeService],
+})
+export class BloodTypeModule {}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\blood-type\service\blood-type.service.ts ====
+import { HttpStatus, Injectable, BadRequestException } from '@nestjs/common';
+import { PrismaService } from 'src/prisma/prisma.service';
+
+@Injectable()
+export class BloodTypeService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async createBloodType(bloodType: string) {
+    const existing = await this.prisma.bloodGroup.findFirst({
+      where: { bloodType: bloodType },
+    });
+
+    if (existing) {
+      throw new BadRequestException('Blood type already exists');
+    }
+
+    await this.prisma.bloodGroup.create({
+      data: { bloodType: bloodType },
+    });
+
+    return { status: HttpStatus.CREATED, message: 'Blood type created' };
+  }
+  async findBloodType(bloodType: string) {
+    const existingBloodType = await this.prisma.bloodGroup.findFirst({
+      where: { bloodType: bloodType },
+    });
+
+    if (!existingBloodType) {
+      throw new BadRequestException('Blood type not found');
+    }
+
+    return {
+      status: HttpStatus.OK,
+      message: 'Blood type found',
+      data: existingBloodType,
+    };
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\hospital\dto\hospital.dto.ts ====
+import { BloodBank, Role, User } from 'generated/prisma';
+
+export class RegisterHospitalDto {
+  name: string;
+  address: string;
+  password: string;
+  phoneNumber: string;
+  registrationId: string;
+  isVerified: boolean;
+  email: string;
+  city: string;
+  state: string;
+  country: string;
+  postalCode: string;
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\hospital\module\hospital.module.ts ====
+import { Module } from '@nestjs/common';
+
+@Module({
+  imports: [],
+  providers: [],
+  exports: [],
+})
+export class HospitalModule {}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\hospital\serivce\hospital.service.ts ====
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { RegisterHospitalDto } from '../dto/hospital.dto';
+import * as bcrpt from 'bcrypt';
+
+@Injectable()
+export class HospitalService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async registerHospital(
+    data: RegisterHospitalDto,
+  ): Promise<{ name: string; email: string }> {
+    const existingHospital = await this.prisma.hospital.findFirst({
+      where: { email: data.email },
+    });
+
+    if (existingHospital) {
+      throw new ConflictException('Email already in use');
+    }
+
+    const hashPassword = await bcrpt.hash(data.password, 10);
+
+    const hospital = await this.prisma.hospital.create({
+      data: {
+        ...data,
+        password: hashPassword,
+      },
+    });
+
+    const { name, email } = hospital;
+    return { name, email };
+  }
+
+  async updateHospital(
+    hospitalId: string,
+    data: Omit<Partial<RegisterHospitalDto>, 'password'>,
+  ): Promise<{ name: string; email: string }> {
+    const existingHospital = await this.prisma.hospital.findFirst({
+      where: { id: hospitalId },
+    });
+
+    if (!existingHospital) {
+      throw new ConflictException('Hospital not registered');
+    }
+
+    const hospital = await this.prisma.hospital.update({
+      where: { id: hospitalId },
+      data: data,
+    });
+
+    const { name, email } = hospital;
+    return { name, email };
+  }
+  async findHospitalById(
+    hospitalId: string,
+  ): Promise<{ name: string; email: string }> {
+    const hospital = await this.prisma.hospital.findFirst({
+      where: { id: hospitalId },
+    });
+
+    if (!hospital) {
+      throw new BadRequestException('Hospital NotFound');
+    }
+    const { name, email } = hospital;
+    return { name, email };
+  }
+  async findAllHospital(filters?: {
+    search?: string;
+    city?: string;
+    isVerified?: boolean;
+    state?: string;
+    country?: string;
+    pagination?: { page?: number; limit?: number };
+  }) {
+    const where: any = {};
+
+    if (filters?.search) {
+      where.OR = [
+        { name: { contains: filters.search, mode: 'insensitive' } },
+        { city: { contains: filters.search, mode: 'insensitive' } },
+        { country: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (typeof filters?.isVerified === 'boolean') {
+      where.isVerified = filters.isVerified;
+    }
+
+    if (filters?.city) {
+      where.city = { equals: filters.city, mode: 'insensitive' };
+    }
+
+    if (filters?.state) {
+      where.state = { equals: filters.state, mode: 'insensitive' };
+    }
+
+    if (filters?.country) {
+      where.country = { equals: filters.country, mode: 'insensitive' };
+    }
+
+    const page = filters?.pagination?.page || 1;
+    const limit = filters?.pagination?.limit || 10;
+    const skip = (page - 1) * limit;
+
+    const [count, data] = await this.prisma.$transaction([
+      this.prisma.hospital.count({ where }),
+      this.prisma.hospital.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    const totalPages = Math.ceil(count / limit);
+    const hasNextPage = page < totalPages;
+    const hasPreviousPage = page > 1;
+
+    return {
+      data,
+      page,
+      limit,
+      totalPages,
+      count,
+      hasNextPage,
+      hasPreviousPage,
+    };
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\notification\notification.module.ts ====
+import { Module } from '@nestjs/common';
+import { NotificationService } from './notification.service';
+
+@Module({
+  providers: [NotificationService],
+  exports: [NotificationService],
+})
+export class NotificationModule {}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\notification\notification.service.ts ====
+import { PrismaClient } from '@prisma/client';
+import {
+  CreateNotificationDto,
+  UpdateNotificationDto,
+} from './dto/notificattion.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
+
+export class NotificationService {
+  constructor(private readonly prisma: PrismaService) {}
+  async createNotification(createNotificationDto: CreateNotificationDto) {
+    const { title, message, userId } = createNotificationDto;
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    return this.prisma.notification.create({
+      data: {
+        title,
+        message,
+        user: { connect: { id: userId } },
+      },
+      include: {
+        user: true,
+      },
+    });
+  }
+
+  async getNotificationById(id: string) {
+    return this.prisma.notification.findUnique({
+      where: { id },
+      include: {
+        user: true,
+      },
+    });
+  }
+
+  async getAllNotifications(userId?: string) {
+    const where = userId ? { userId } : {};
+    return this.prisma.notification.findMany({
+      where,
+      include: {
+        user: true,
+      },
+    });
+  }
+
+  async updateNotification(
+    id: string,
+    updateNotificationDto: UpdateNotificationDto,
+  ) {
+    const { title, message } = updateNotificationDto;
+
+    const notification = await this.prisma.notification.findUnique({
+      where: { id },
+    });
+
+    if (!notification) {
+      throw new Error('Notification not found');
+    }
+
+    return this.prisma.notification.update({
+      where: { id },
+      data: {
+        title,
+        message,
+      },
+      include: {
+        user: true,
+      },
+    });
+  }
+
+  async deleteNotification(id: string) {
+    const notification = await this.prisma.notification.findUnique({
+      where: { id },
+    });
+
+    if (!notification) {
+      throw new Error('Notification not found');
+    }
+
+    return this.prisma.notification.delete({
+      where: { id },
+    });
+  }
+
+  async getUserNotifications(userId: string) {
+    // Check if user exists
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    return this.prisma.notification.findMany({
+      where: { userId },
+      include: {
+        user: true,
+      },
+    });
+  }
+
+  // async markNotificationAsRead(id: string) {
+  //   const notification = await this.prisma.notification.findUnique({
+  //     where: { id },
+  //   });
+
+  //   if (!notification) {
+  //     throw new Error('Notification not found');
+  //   }
+
+  //   return this.prisma.notification.update({where:{id:id}})
+  // }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\notification\dto\notificattion.dto.ts ====
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+
+export class CreateNotificationDto {
+  @IsString()
+  @IsNotEmpty()
+  title: string;
+
+  @IsString()
+  @IsNotEmpty()
+  message: string;
+
+  @IsString()
+  @IsNotEmpty()
+  userId: string;
+}
+
+export class UpdateNotificationDto {
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  message?: string;
+
+  @IsOptional()
+  @IsString()
+  userId?: string;
+}
+
+export class NotificationResponseDto {
+  id: string;
+  title: string;
+  message: string;
+  userId: string;
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\permission\permission.controller.ts ====
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
+import { PermissionService } from './permission.service';
+import { CreatePermissionDto, UpdatePermissionDto } from './dto/permission.dto';
+
+@Controller('permission')
+export class PermissionController {
+  constructor(private readonly permissionService: PermissionService) {}
+
+  @Post('create')
+  async createPermission(@Body() createPermissionDto: CreatePermissionDto) {
+    try {
+      return await this.permissionService.createPermission(createPermissionDto);
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Get('get/:id')
+  async getPermission(@Param('id') id: string) {
+    try {
+      const permission = await this.permissionService.getPermissionById(
+        Number(id),
+      );
+      if (!permission) {
+        throw new HttpException('Permission not found', HttpStatus.NOT_FOUND);
+      }
+      return permission;
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Get('all')
+  async getAllPermissions() {
+    try {
+      return await this.permissionService.getAllPermissions();
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Patch('update/:id')
+  async updatePermission(
+    @Param('id') id: string,
+    @Body() updatePermissionDto: UpdatePermissionDto,
+  ) {
+    try {
+      return await this.permissionService.updatePermission(
+        Number(id),
+        updatePermissionDto,
+      );
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Delete('delete/:id')
+  async deletePermission(@Param('id') id: string) {
+    try {
+      await this.permissionService.deletePermission(Number(id));
+      return { statusCode: HttpStatus.NO_CONTENT };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\permission\permission.modules.ts ====
+import { Module } from '@nestjs/common';
+import { PermissionService } from './permission.service';
+import { PermissionController } from './permission.controller';
+
+@Module({
+  providers: [PermissionService],
+  controllers: [PermissionController],
+})
+export class PermissionModule {}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\permission\permission.service.ts ====
+import { PrismaClient } from '@prisma/client';
+import { CreatePermissionDto, UpdatePermissionDto } from './dto/permission.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
+
+export class PermissionService {
+  constructor(private readonly prisma: PrismaService) {}
+  async createPermission(createPermissionDto: CreatePermissionDto) {
+    const { action, description } = createPermissionDto;
+
+    // Check if permission with same action already exists
+    const existingPermission = await this.prisma.permission.findFirst({
+      where: { action },
+    });
+
+    if (existingPermission) {
+      throw new Error('Permission with this action already exists');
+    }
+
+    return this.prisma.permission.create({
+      data: {
+        action,
+        description,
+      },
+    });
+  }
+
+  async getPermissionById(id: number) {
+    return this.prisma.permission.findUnique({
+      where: { id },
+      include: {
+        roles: true,
+      },
+    });
+  }
+
+  async getAllPermissions() {
+    return this.prisma.permission.findMany({
+      include: {
+        roles: true,
+      },
+    });
+  }
+
+  async updatePermission(id: number, updatePermissionDto: UpdatePermissionDto) {
+    const { action, description } = updatePermissionDto;
+
+    if (action) {
+      const existingPermission = await this.prisma.permission.findFirst({
+        where: {
+          action,
+          NOT: { id },
+        },
+      });
+
+      if (existingPermission) {
+        throw new Error('Permission with this action already exists');
+      }
+    }
+
+    return this.prisma.permission.update({
+      where: { id },
+      data: {
+        action,
+        description,
+      },
+    });
+  }
+
+  async deletePermission(id: number) {
+    const permission = await this.prisma.permission.findUnique({
+      where: { id },
+      include: { roles: true },
+    });
+
+    if (!permission) {
+      throw new Error('Permission not found');
+    }
+
+    if (permission.roles.length > 0) {
+      throw new Error('Cannot delete permission assigned to roles');
+    }
+
+    return this.prisma.permission.delete({
+      where: { id },
+    });
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\permission\dto\permission.dto.ts ====
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { Role } from 'generated/prisma';
+
+export class CreatePermissionDto {
+  @IsString()
+  @IsNotEmpty()
+  action: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+}
+
+export class UpdatePermissionDto {
+  @IsOptional()
+  @IsString()
+  action?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  role: Role[];
+}
+
+export class PermissionResponseDto {
+  id: number;
+  action: string;
+  description?: string;
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\prisma\prisma.module.ts ====
+import { Global, Module } from "@nestjs/common";
+import { PrismaService } from "./prisma.service";
+
+@Global()
+@Module({
+    providers:[PrismaService],
+    exports:[PrismaService]
+})
+export class PrismaModule{}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\prisma\prisma.service.ts ====
+import { INestApplication, Injectable, OnModuleInit } from '@nestjs/common';
+import { PrismaClient } from 'generated/prisma'; // Your custom Prisma client
+
+@Injectable()
+export class PrismaService extends PrismaClient implements OnModuleInit {
+  async onModuleInit() {
+    await this.$connect();
+  }
+
+  async enableShutdownHooks(app: INestApplication) {
+    process.on('beforeExit', async () => {
+      await app.close();
+    });
+
+    this.$on('beforeExit' as never, async () => {
+      await app.close();
+    });
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\role\role.controller.ts ====
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Res,
+  HttpStatus,
+} from '@nestjs/common';
+import { Response } from 'express';
+import { RoleService } from './role.service';
+import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
+
+@Controller('role')
+export class RoleController {
+  constructor(private readonly roleService: RoleService) {}
+
+  @Post('create')
+  async createRole(@Body() body: CreateRoleDto, @Res() res: Response) {
+    try {
+      const role = await this.roleService.createRole(body);
+      return res.status(HttpStatus.CREATED).json(role);
+    } catch (error: any) {
+      return res
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ message: error.message });
+    }
+  }
+
+  @Get('get/:id')
+  async getRole(@Param('id') id: string, @Res() res: Response) {
+    try {
+      const role = await this.roleService.getRoleById(Number(id));
+      if (role) {
+        return res.json(role);
+      } else {
+        return res
+          .status(HttpStatus.NOT_FOUND)
+          .json({ message: 'Role not found' });
+      }
+    } catch (error: any) {
+      return res
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ message: error.message });
+    }
+  }
+
+  @Get('all')
+  async getAllRoles(
+    @Query('hospitalId') hospitalId: string,
+    @Res() res: Response,
+  ) {
+    try {
+      const roles = await this.roleService.getAllRoles(hospitalId);
+      return res.json(roles);
+    } catch (error: any) {
+      return res
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ message: error.message });
+    }
+  }
+
+  @Patch('update/:id')
+  async updateRole(
+    @Param('id') id: string,
+    @Body() updateRoleDto: UpdateRoleDto,
+    @Res() res: Response,
+  ) {
+    try {
+      const role = await this.roleService.updateRole(Number(id), updateRoleDto);
+      return res.json(role);
+    } catch (error: any) {
+      return res
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ message: error.message });
+    }
+  }
+
+  @Delete('delete/:id')
+  async deleteRole(@Param('id') id: string, @Res() res: Response) {
+    try {
+      await this.roleService.deleteRole(Number(id));
+      return res.status(HttpStatus.NO_CONTENT).send();
+    } catch (error: any) {
+      return res
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ message: error.message });
+    }
+  }
+
+  @Put('assign/:id')
+  async assignPermissions(
+    @Param('id') id: string,
+    @Body('permissionIds') permissionIds: number[],
+    @Res() res: Response,
+  ) {
+    try {
+      const role = await this.roleService.assignPermissionsToRole(
+        Number(id),
+        permissionIds,
+      );
+      return res.json(role);
+    } catch (error: any) {
+      return res
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ message: error.message });
+    }
+  }
+
+  @Patch('remove/:id')
+  async removePermissions(
+    @Param('id') id: string,
+    @Body('permissionIds') permissionIds: number[],
+    @Res() res: Response,
+  ) {
+    try {
+      const role = await this.roleService.removePermissionsFromRole(
+        Number(id),
+        permissionIds,
+      );
+      return res.json(role);
+    } catch (error: any) {
+      return res
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ message: error.message });
+    }
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\role\role.modules.ts ====
+import { Module } from '@nestjs/common';
+import { RoleService } from './role.service';
+import { RoleController } from './role.controller';
+
+@Module({
+  providers: [RoleService],
+  controllers: [RoleController],
+})
+export class RoleModule {}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\role\role.service.ts ====
+import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
+
+export class RoleService {
+  constructor(private readonly prisma: PrismaService) {}
+  async createRole(createRoleDto: CreateRoleDto) {
+    const { roleName, hospitalId, permissions } = createRoleDto;
+
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id: hospitalId },
+    });
+
+    if (!hospital) {
+      throw new Error('Hospital not found');
+    }
+
+    const existingRole = await this.prisma.role.findFirst({
+      where: {
+        roleName,
+        hospitalId,
+      },
+    });
+
+    if (existingRole) {
+      throw new Error('Role with this name already exists in this hospital');
+    }
+
+    return this.prisma.role.create({
+      data: {
+        roleName,
+        hospital: { connect: { id: hospitalId } },
+        permissions: {
+          connect: permissions?.map((id) => ({ id })),
+        },
+      },
+      include: {
+        permissions: true,
+        hospital: true,
+      },
+    });
+  }
+
+  async getRoleById(id: number) {
+    return this.prisma.role.findUnique({
+      where: { id },
+      include: {
+        permissions: true,
+        hospital: true,
+        users: true,
+      },
+    });
+  }
+
+  async getAllRoles(hospitalId?: string) {
+    const where = hospitalId ? { hospitalId } : {};
+    return this.prisma.role.findMany({
+      where,
+      include: {
+        permissions: true,
+        hospital: true,
+      },
+    });
+  }
+
+  async updateRole(id: number, updateRoleDto: UpdateRoleDto) {
+    const { roleName, permissions } = updateRoleDto;
+
+    const role = await this.prisma.role.findUnique({
+      where: { id },
+    });
+
+    if (!role) {
+      throw new Error('Role not found');
+    }
+
+    if (roleName && roleName !== role.roleName) {
+      const existingRole = await this.prisma.role.findFirst({
+        where: {
+          roleName,
+          hospitalId: role.hospitalId || undefined,
+          NOT: { id },
+        },
+      });
+
+      if (existingRole) {
+        throw new Error('Role with this name already exists in this hospital');
+      }
+    }
+
+    return this.prisma.role.update({
+      where: { id },
+      data: {
+        roleName,
+        permissions: permissions
+          ? {
+              set: permissions.map((id) => ({ id })),
+            }
+          : undefined,
+      },
+      include: {
+        permissions: true,
+        hospital: true,
+      },
+    });
+  }
+
+  async deleteRole(id: number) {
+    const role = await this.prisma.role.findUnique({
+      where: { id },
+      include: { users: true },
+    });
+
+    if (!role) {
+      throw new Error('Role not found');
+    }
+
+    if (role.users.length > 0) {
+      throw new Error('Cannot delete role assigned to users');
+    }
+
+    return this.prisma.role.delete({
+      where: { id },
+    });
+  }
+
+  async assignPermissionsToRole(roleId: number, permissionIds: number[]) {
+    return this.prisma.role.update({
+      where: { id: roleId },
+      data: {
+        permissions: {
+          connect: permissionIds.map((id) => ({ id })),
+        },
+      },
+      include: {
+        permissions: true,
+      },
+    });
+  }
+
+  async removePermissionsFromRole(roleId: number, permissionIds: number[]) {
+    return this.prisma.role.update({
+      where: { id: roleId },
+      data: {
+        permissions: {
+          disconnect: permissionIds.map((id) => ({ id })),
+        },
+      },
+      include: {
+        permissions: true,
+      },
+    });
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\role\dto\role.dto.ts ====
+import { IsArray, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { PermissionResponseDto } from 'src/permission/dto/permission.dto';
+
+export class CreateRoleDto {
+  @IsString()
+  @IsNotEmpty()
+  roleName: string;
+
+  @IsOptional()
+  @IsString()
+  hospitalId?: string;
+
+  @IsOptional()
+  @IsArray()
+  permissions?: number[];
+}
+
+export class UpdateRoleDto {
+  @IsOptional()
+  @IsString()
+  roleName?: string;
+
+  @IsOptional()
+  @IsString()
+  hospitalId?: string;
+
+  @IsOptional()
+  @IsArray()
+  permissions?: number[];
+}
+
+export class RoleResponseDto {
+  id: number;
+  roleName: string;
+  hospitalId?: string;
+  permissions: PermissionResponseDto[];
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\users\controller\users.controller.spec.ts ====
+import { Test, TestingModule } from '@nestjs/testing';
+import { UsersController } from './users.controller';
+
+describe('UsersController', () => {
+  let controller: UsersController;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [UsersController],
+    }).compile();
+
+    controller = module.get<UsersController>(UsersController);
+  });
+
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
+  });
+});
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\users\controller\users.controller.ts ====
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  HttpStatus,
+  Post,
+  Put,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import { UserService } from '../service/user.service';
+import { CreateUserDto } from '../dto/user.dto';
+import { UserType } from 'generated/prisma';
+import { JwtAuthGuard } from 'src/auth/gauards/jwt-auth.guard';
+import { AuthenticatedRequest } from 'src/auth/dto/google-strategy.dto';
+import { BloodTypeService } from 'src/blood-type/service/blood-type.service';
+
+@Controller('users')
+export class UsersController {
+  constructor(
+    private readonly userService: UserService,
+    private readonly bloodType: BloodTypeService,
+  ) {}
+
+  @Post('register')
+  async register(@Body() body: CreateUserDto) {
+    try {
+      const bloodGroup = await this.bloodType.findBloodType(body.bloodType);
+      if (!bloodGroup) {
+        throw new BadRequestException('BloodGroup doesnt not exit');
+      }
+      const user = await this.userService.registerUser(body);
+      return {
+        status: HttpStatus.CREATED,
+        message: 'User Registration Successful',
+        user,
+      };
+    } catch (error) {
+      return {
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: error.message || 'An error occurred during registration',
+      };
+    }
+  }
+
+  @Get('all')
+  async getUsers(
+    @Query('search') search?: string,
+    @Query('bloodType') bloodType?: string,
+    @Query('userType') userType?: UserType,
+    @Query('minAge') minAge?: number,
+    @Query('maxAge') maxAge?: number,
+    @Query('country') country?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.userService.getAllUsers({
+      search,
+      bloodType,
+      userType,
+      ageRange: {
+        min: minAge ? Number(minAge) : undefined,
+        max: maxAge ? Number(maxAge) : undefined,
+      },
+      country,
+      dateRange: {
+        start: startDate ? new Date(startDate) : undefined,
+        end: endDate ? new Date(endDate) : undefined,
+      },
+      pagination: {
+        page: page ? Number(page) : 1,
+        limit: limit ? Number(limit) : 10,
+      },
+    });
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async getMe(@Req() req: AuthenticatedRequest) {
+    return this.userService.getMe(req.user.userId);
+  }
+
+  @Get(':id')
+  async getUserById(@Req() id: string) {
+    this.userService.findUserById(id);
+  }
+
+  @Put('update')
+  @UseGuards(JwtAuthGuard)
+  async updateUser(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: Partial<CreateUserDto>,
+  ) {
+    this.userService.editUser(req.user.userId, body);
+  }
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\users\dto\user.dto.ts ====
+import {
+  IsDate,
+  IsEmail,
+  IsEnum,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+} from 'class-validator';
+import { UserType } from 'generated/prisma';
+
+export class CreateUserDto {
+  @IsString()
+  firstName: string;
+
+  @IsString()
+  lastName: string;
+
+  @IsString()
+  phoneNumber: string;
+
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  password: string;
+
+  @IsString()
+  address: string;
+
+  @IsInt()
+  age: number;
+
+  @IsOptional()
+  bloodType: string;
+
+  @IsString()
+  country: string;
+
+  @IsInt()
+  postalCode: number;
+
+  @IsEnum(UserType)
+  userType: UserType;
+
+  @IsOptional()
+  @IsString()
+  hospitalId?: string;
+
+  @IsOptional()
+  @IsDate()
+  lastDonationDate: Date;
+
+  @IsOptional()
+  @IsDate({ each: true })
+  donationHistoy?: Date[];
+}
+
+export class LoginUserDto {
+  @IsEmail()
+  email: string;
+  @IsString()
+  password: string;
+}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\users\mapper\user.mapper.ts ====
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\users\module\user.module.ts ====
+import { Module } from '@nestjs/common';
+import { UserService } from '../service/user.service';
+import { UsersController } from '../controller/users.controller';
+import { BloodTypeModule } from 'src/blood-type/module/blood-type.module';
+
+@Module({
+  imports: [BloodTypeModule],
+  providers: [UserService],
+  controllers: [UsersController],
+  exports: [UserService],
+})
+export class UserModules {}
+
+==== C:\Users\Enigma\Downloads\BloodDonor Server\src\users\service\user.service.ts ====
+import { PrismaService } from 'src/prisma/prisma.service';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { CreateUserDto } from '../dto/user.dto';
+import * as bcrypt from 'bcrypt';
+import { UserType } from 'generated/prisma';
+
+@Injectable()
+export class UserService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async getAllUsers(filters?: {
+    search?: string;
+    bloodType?: string;
+    userType?: UserType;
+    ageRange?: { min?: number; max?: number };
+    country?: string;
+    dateRange?: { start?: Date; end?: Date };
+    pagination?: { page?: number; limit?: number };
+  }) {
+    const where: any = {};
+
+    if (filters?.search) {
+      where.OR = [
+        { firstName: { contains: filters.search, mode: 'insensitive' } },
+        { lastName: { contains: filters.search, mode: 'insensitive' } },
+        { email: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Blood type filter
+    if (filters?.bloodType) {
+      where.bloodGroup = {
+        bloodType: filters.bloodType,
+      };
+    }
+
+    // User type filter
+    if (filters?.userType) {
+      where.userType = filters.userType;
+    }
+
+    // Age range filter
+    if (filters?.ageRange) {
+      where.age = {};
+      if (filters.ageRange.min) where.age.gte = filters.ageRange.min;
+      if (filters.ageRange.max) where.age.lte = filters.ageRange.max;
+    }
+
+    // Country filter
+    if (filters?.country) {
+      where.country = filters.country;
+    }
+
+    // Date range filter (for createdAt)
+    if (filters?.dateRange) {
+      where.createdAt = {};
+      if (filters.dateRange.start)
+        where.createdAt.gte = filters.dateRange.start;
+      if (filters.dateRange.end) where.createdAt.lte = filters.dateRange.end;
+    }
+
+    // Pagination
+    const page = filters?.pagination?.page || 1;
+    const limit = filters?.pagination?.limit || 10;
+    const skip = (page - 1) * limit;
+
+    const [users, totalCount] = await Promise.all([
+      this.prisma.user.findMany({
+        omit: {
+          password: true,
+        },
+        include: {
+          bloodGroup: {
+            select: {
+              bloodType: true,
+            },
+          },
+        },
+        where,
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: limit,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    return {
+      data: users,
+      meta: {
+        total: totalCount,
+        page,
+        limit,
+        totalPages: Math.ceil(totalCount / limit),
+      },
+    };
+  }
+
+  async getMe(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+      },
+    });
+    if (!user) {
+      throw new BadRequestException('UserNotFound');
+    }
+    return user;
+  }
+
+  async registerUser(body: CreateUserDto) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: body.email },
+    });
+
+    if (existingUser) {
+      throw new BadRequestException('User already exists');
+    }
+
+    const bloodGroupExists = await this.prisma.bloodGroup.findUnique({
+      where: { bloodType: body.bloodType },
+    });
+
+    if (!bloodGroupExists) {
+      throw new BadRequestException('Invalid blood group ID');
+    }
+
+    const hashPass = await bcrypt.hash(body.password, 10);
+    const { bloodType, ...userData } = body;
+    const data = {
+      ...userData,
+      password: hashPass,
+      bloodGroupId: bloodGroupExists.id,
+    };
+
+    const newUser = await this.prisma.user.create({
+      data: data,
+    });
+
+    return newUser;
+  }
+
+  async editUser(
+    userId: string,
+    data: Omit<Partial<CreateUserDto>, 'password'>,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    let bloodGroupId = user.bloodGroupId;
+    if (data.bloodType) {
+      const bloodGroupExists = await this.prisma.bloodGroup.findUnique({
+        where: { bloodType: data.bloodType },
+      });
+
+      if (!bloodGroupExists) {
+        throw new BadRequestException('Invalid blood group');
+      }
+      bloodGroupId = bloodGroupExists.id;
+    }
+    const updateData: any = {
+      ...data,
+      bloodGroupId,
+    };
+
+    if (updateData.bloodType) {
+      delete updateData.bloodType;
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+    });
+  }
+
+  async findUserByEmail(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email: email } });
+    return user;
+  }
+
+  async findUserById(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        bloodGroup: {
+          select: {
+            bloodType: true,
+          },
+        },
+        hospital: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    const { password, ...response } = user;
+    return response;
+  }
+
+  // async requestVerification(userId:string){
+  //   const user = this.findUserById(userId)
+  //   user.isVeri
+
+  // }
+
+  // async verifyAcct(userId: string) {
+  //   const user = await this.findUserById(userId);
+  //   if (!user) {
+  //     throw new BadRequestException('user not found');
+  //   }
+  // }
+}
+

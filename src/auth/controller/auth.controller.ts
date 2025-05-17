@@ -4,6 +4,8 @@ import { LoginUserDto } from 'src/users/dto/user.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { UserService } from 'src/users/service/user.service';
 import { JwtService } from '@nestjs/jwt';
+import { UserType } from 'generated/prisma';
+import { ApiOperation, ApiResponse, ApiTags, ApiBody } from '@nestjs/swagger';
 
 @Controller('auth')
 export class AuthController {
@@ -13,15 +15,22 @@ export class AuthController {
     private readonly jwtService: JwtService,
   ) {}
 
+  @ApiOperation({ summary: 'User login' })
+  @ApiResponse({ status: 200, description: 'Login successful' })
+  @ApiResponse({ status: 400, description: 'Invalid credentials' })
+  @ApiBody({ type: LoginUserDto })
   @Post('login')
   async login(@Body() body: LoginUserDto) {
     return this.authService.login(body.email, body.password);
   }
 
+  @ApiOperation({ summary: 'Initiate Google OAuth flow' })
   @Get('google')
   @UseGuards(AuthGuard('google'))
   async googleAuth() {}
 
+  @ApiOperation({ summary: 'Google OAuth callback' })
+  @ApiResponse({ status: 200, description: 'Google login successful' })
   @Get('google/redirect')
   @UseGuards(AuthGuard('google'))
   async googleAuthRedirect(@Req() req) {
@@ -38,9 +47,11 @@ export class AuthController {
         password: '',
         address: '',
         age: 0,
+        userType: UserType.DONOR,
         bloodType: 'O+',
         country: '',
         postalCode: 0,
+        lastDonationDate: new Date(),
       });
     }
 

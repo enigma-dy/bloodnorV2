@@ -8,24 +8,103 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id Int @id @default(autoincrement())
-  firstName String
-  lastName String
-  phoneNumber String
-  email String @unique 
-  password String
-  address String
-  age Int
-  bloodGroup BloodGroup @relation(fields: [bloodGroupId],references: [id])
-  bloodGroupId Int
-  country String
-  postalCode Int
+enum UserType {
+  SUPER_ADMIN
+  DONOR
+  PATIENT
+  STAFF
 }
 
-model BloodGroup{
-  id Int @id @default(autoincrement())
-  bloodType String @unique
-  user User[]
+model User {
+  id           String     @id @default(cuid())
+  firstName    String
+  lastName     String
+  phoneNumber  String
+  email        String     @unique
+  password     String
+  address      String
+  age          Int
+  bloodGroup   BloodGroup @relation(fields: [bloodGroupId], references: [id])
+  bloodGroupId Int
+  country      String
+  isVerified   Boolean @default(false)
+  postalCode   Int
+  hospital     Hospital?  @relation(fields: [hospitalId], references: [id])
+  hospitalId   String?
+  userType     UserType
+  donationHistoy DateTime[]
+  
+  lastDonationDate DateTime?
 
+  verificationToken String?
+  
+  createdAt DateTime @default(now())
+  
+
+  roles Role[]
+
+
+  Notification Notification[] @relation("UserNotifications")
+}
+
+model Role {
+  id          Int          @id @default(autoincrement())
+  roleName    String
+  hospital    Hospital?    @relation(fields: [hospitalId], references: [id])
+  hospitalId  String?
+  users       User[]
+  permissions Permission[]
+
+  @@unique([roleName, hospitalId])
+}
+
+model Permission {
+  id          Int     @id @default(autoincrement())
+  action      String
+  description String?
+  roles       Role[]
+}
+
+model Hospital {
+  id             String   @id @default(cuid())
+  name           String
+  address        String
+  email          String
+  password       String
+  phoneNumber    String
+  registrationId String
+  isVerified     Boolean @default(false)
+  city           String
+  state          String
+  country        String
+  postalCode     String
+  patients       User[]
+  roles          Role[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  BloodBank BloodBank[]
+}
+
+model BloodGroup {
+  id        Int    @id @default(autoincrement())
+  bloodType String @unique
+  user      User[]
+}
+
+model BloodBank{
+  id String @id @default(cuid())
+  name String @unique
+  address String
+  hospital Hospital @relation(fields: [hospitalId],references: [id])
+  hospitalId String
+  phoneNumber String
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  userId    String
+  user      User     @relation("UserNotifications", fields: [userId], references: [id])
 }

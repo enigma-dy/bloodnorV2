@@ -5,7 +5,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 export class BloodTypeService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createBlood(bloodType: string) {
+  async createBloodType(bloodType: string) {
     const existing = await this.prisma.bloodGroup.findFirst({
       where: { bloodType: bloodType },
     });
@@ -19,5 +19,20 @@ export class BloodTypeService {
     });
 
     return { status: HttpStatus.CREATED, message: 'Blood type created' };
+  }
+  async findBloodType(bloodType: string) {
+    const existingBloodType = await this.prisma.bloodGroup.findFirst({
+      where: { bloodType: bloodType },
+    });
+
+    if (!existingBloodType) {
+      throw new BadRequestException('Blood type not found');
+    }
+
+    return {
+      status: HttpStatus.OK,
+      message: 'Blood type found',
+      data: existingBloodType,
+    };
   }
 }

@@ -131,12 +131,63 @@ exports.Prisma.UserScalarFieldEnum = {
   age: 'age',
   bloodGroupId: 'bloodGroupId',
   country: 'country',
-  postalCode: 'postalCode'
+  isVerified: 'isVerified',
+  postalCode: 'postalCode',
+  hospitalId: 'hospitalId',
+  userType: 'userType',
+  donationHistoy: 'donationHistoy',
+  lastDonationDate: 'lastDonationDate',
+  verificationToken: 'verificationToken',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.RoleScalarFieldEnum = {
+  id: 'id',
+  roleName: 'roleName',
+  hospitalId: 'hospitalId'
+};
+
+exports.Prisma.PermissionScalarFieldEnum = {
+  id: 'id',
+  action: 'action',
+  description: 'description'
+};
+
+exports.Prisma.HospitalScalarFieldEnum = {
+  id: 'id',
+  name: 'name',
+  address: 'address',
+  email: 'email',
+  password: 'password',
+  phoneNumber: 'phoneNumber',
+  registrationId: 'registrationId',
+  isVerified: 'isVerified',
+  city: 'city',
+  state: 'state',
+  country: 'country',
+  postalCode: 'postalCode',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
 };
 
 exports.Prisma.BloodGroupScalarFieldEnum = {
   id: 'id',
   bloodType: 'bloodType'
+};
+
+exports.Prisma.BloodBankScalarFieldEnum = {
+  id: 'id',
+  name: 'name',
+  address: 'address',
+  hospitalId: 'hospitalId',
+  phoneNumber: 'phoneNumber'
+};
+
+exports.Prisma.NotificationScalarFieldEnum = {
+  id: 'id',
+  title: 'title',
+  message: 'message',
+  userId: 'userId'
 };
 
 exports.Prisma.SortOrder = {
@@ -149,10 +200,25 @@ exports.Prisma.QueryMode = {
   insensitive: 'insensitive'
 };
 
+exports.Prisma.NullsOrder = {
+  first: 'first',
+  last: 'last'
+};
+exports.UserType = exports.$Enums.UserType = {
+  SUPER_ADMIN: 'SUPER_ADMIN',
+  DONOR: 'DONOR',
+  PATIENT: 'PATIENT',
+  STAFF: 'STAFF'
+};
 
 exports.Prisma.ModelName = {
   User: 'User',
-  BloodGroup: 'BloodGroup'
+  Role: 'Role',
+  Permission: 'Permission',
+  Hospital: 'Hospital',
+  BloodGroup: 'BloodGroup',
+  BloodBank: 'BloodBank',
+  Notification: 'Notification'
 };
 
 /**
