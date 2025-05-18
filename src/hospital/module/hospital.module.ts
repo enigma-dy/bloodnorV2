@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
+import { HospitalService } from '../serivce/hospital.service';
+import { HospitalController } from '../controller/hospital.controller';
 
 @Module({
-  imports: [],
-  providers: [],
-  exports: [],
+  providers: [HospitalService],
+  controllers: [HospitalController],
+  exports: [HospitalService],
 })
 export class HospitalModule {}

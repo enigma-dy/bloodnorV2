@@ -92,11 +92,13 @@ model BloodGroup {
 
 model BloodBank {
   id          String   @id @default(cuid())
-  name        String   @unique
+  name        String
   address     String
   hospital    Hospital @relation(fields: [hospitalId], references: [id])
   hospitalId  String
   phoneNumber String
+
+  @@unique([name, hospitalId])
 }
 
 model Notification {

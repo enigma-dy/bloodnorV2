@@ -25,6 +25,7 @@ import { BloodBankModule } from './blood-bank/blood-bank.module';
     NotificationModule,
     HospitalModule,
     BloodBankModule,
+    HospitalModule,
   ],
   controllers: [AppController],
   providers: [AppService, AuthService],

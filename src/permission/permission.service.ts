@@ -1,7 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import { CreatePermissionDto, UpdatePermissionDto } from './dto/permission.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { Injectable } from '@nestjs/common';
 
+@Injectable()
 export class PermissionService {
   constructor(private readonly prisma: PrismaService) {}
   async createPermission(createPermissionDto: CreatePermissionDto) {

@@ -2,10 +2,11 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { RegisterHospitalDto } from '../dto/hospital.dto';
-import * as bcrpt from 'bcrypt';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class HospitalService {
@@ -14,6 +15,10 @@ export class HospitalService {
   async registerHospital(
     data: RegisterHospitalDto,
   ): Promise<{ name: string; email: string }> {
+    if (!data || !data.password) {
+      throw new BadRequestException('Password is required');
+    }
+
     const existingHospital = await this.prisma.hospital.findFirst({
       where: { email: data.email },
     });
@@ -22,17 +27,21 @@ export class HospitalService {
       throw new ConflictException('Email already in use');
     }
 
-    const hashPassword = await bcrpt.hash(data.password, 10);
+    try {
+      const hashPassword = await bcrypt.hash(data.password, 10);
 
-    const hospital = await this.prisma.hospital.create({
-      data: {
-        ...data,
-        password: hashPassword,
-      },
-    });
+      const hospital = await this.prisma.hospital.create({
+        data: {
+          ...data,
+          password: hashPassword,
+        },
+      });
 
-    const { name, email } = hospital;
-    return { name, email };
+      const { name, email } = hospital;
+      return hospital;
+    } catch (error) {
+      throw new InternalServerErrorException('Could not create user');
+    }
   }
 
   async updateHospital(

@@ -1,6 +1,8 @@
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 
+@Injectable()
 export class RoleService {
   constructor(private readonly prisma: PrismaService) {}
   async createRole(createRoleDto: CreateRoleDto) {
@@ -22,7 +24,9 @@ export class RoleService {
     });
 
     if (existingRole) {
-      throw new Error('Role with this name already exists in this hospital');
+      throw new BadRequestException(
+        'Role with this name already exists in this hospital',
+      );
     }
 
     return this.prisma.role.create({

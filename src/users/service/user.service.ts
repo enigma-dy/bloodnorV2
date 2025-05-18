@@ -138,11 +138,14 @@ export class UserService {
       bloodGroupId: bloodGroupExists.id,
     };
 
-    const newUser = await this.prisma.user.create({
-      data: data,
-    });
-
-    return newUser;
+    try {
+      const newUser = await this.prisma.user.create({
+        data: data,
+      });
+      return newUser;
+    } catch (error) {
+      throw new BadRequestException('Invalid hospital ID provided');
+    }
   }
 
   async editUser(

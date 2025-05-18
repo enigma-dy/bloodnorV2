@@ -10,14 +10,25 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { CreateBloodBankDto, UpdateBloodBankDto } from './dto/blood-bank.dto';
 import { BloodBankService } from './blood-bank.service';
 
+@ApiTags('Blood Bank')
 @Controller('blood-bank')
 export class BloodBankController {
   constructor(private readonly bloodBankService: BloodBankService) {}
 
   @Post('create')
+  @ApiOperation({ summary: 'Create a new blood bank' })
+  @ApiResponse({ status: 201, description: 'Blood bank created successfully' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
   async createBloodBank(@Body() createBloodBankDto: CreateBloodBankDto) {
     try {
       return await this.bloodBankService.createBloodBank(createBloodBankDto);
@@ -26,7 +37,11 @@ export class BloodBankController {
     }
   }
 
-  @Get('get/:id')
+  @Get('/:id')
+  @ApiOperation({ summary: 'Get a blood bank by ID' })
+  @ApiParam({ name: 'id', description: 'Blood bank ID' })
+  @ApiResponse({ status: 200, description: 'Blood bank found' })
+  @ApiResponse({ status: 404, description: 'Blood bank not found' })
   async getBloodBank(@Param('id') id: string) {
     try {
       const bloodBank = await this.bloodBankService.getBloodBankById(id);
@@ -40,6 +55,13 @@ export class BloodBankController {
   }
 
   @Get('all')
+  @ApiOperation({ summary: 'Get all blood banks' })
+  @ApiQuery({
+    name: 'hospitalId',
+    required: false,
+    description: 'Filter by hospital ID',
+  })
+  @ApiResponse({ status: 200, description: 'List of blood banks' })
   async getAllBloodBanks(@Query('hospitalId') hospitalId?: string) {
     try {
       return await this.bloodBankService.getAllBloodBanks(hospitalId);
@@ -49,6 +71,10 @@ export class BloodBankController {
   }
 
   @Patch('update/:id')
+  @ApiOperation({ summary: 'Update a blood bank' })
+  @ApiParam({ name: 'id', description: 'Blood bank ID' })
+  @ApiResponse({ status: 200, description: 'Blood bank updated successfully' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
   async updateBloodBank(
     @Param('id') id: string,
     @Body() updateBloodBankDto: UpdateBloodBankDto,
@@ -64,6 +90,10 @@ export class BloodBankController {
   }
 
   @Delete('delete/:id')
+  @ApiOperation({ summary: 'Delete a blood bank' })
+  @ApiParam({ name: 'id', description: 'Blood bank ID' })
+  @ApiResponse({ status: 204, description: 'Blood bank deleted successfully' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
   async deleteBloodBank(@Param('id') id: string) {
     try {
       await this.bloodBankService.deleteBloodBank(id);
@@ -74,6 +104,12 @@ export class BloodBankController {
   }
 
   @Get('by-hospital/:hospitalId')
+  @ApiOperation({ summary: 'Get blood banks by hospital ID' })
+  @ApiParam({ name: 'hospitalId', description: 'Hospital ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of blood banks for the hospital',
+  })
   async getBloodBanksByHospital(@Param('hospitalId') hospitalId: string) {
     try {
       return await this.bloodBankService.getBloodBanksByHospital(hospitalId);

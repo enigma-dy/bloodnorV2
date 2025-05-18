@@ -1,40 +1,51 @@
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateBloodBankDto, UpdateBloodBankDto } from './dto/blood-bank.dto';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { HospitalService } from 'src/hospital/serivce/hospital.service';
 
+@Injectable()
 export class BloodBankService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly hospitalService: HospitalService,
+  ) {}
+
   async createBloodBank(createBloodBankDto: CreateBloodBankDto) {
     const { name, address, hospitalId, phoneNumber } = createBloodBankDto;
 
-    // Check if hospital exists
-    const hospital = await this.prisma.hospital.findUnique({
-      where: { id: hospitalId },
-    });
+    const hospitalExists =
+      await this.hospitalService.findHospitalById(hospitalId);
 
-    if (!hospital) {
-      throw new Error('Hospital not found');
+    if (!hospitalExists) {
+      throw new BadRequestException(`Hospital with ID ${hospitalId} not found`);
     }
 
-    // Check if blood bank with same name already exists
     const existingBloodBank = await this.prisma.bloodBank.findFirst({
-      where: { name },
+      where: {
+        name,
+        hospitalId,
+      },
     });
 
     if (existingBloodBank) {
-      throw new Error('Blood bank with this name already exists');
+      throw new BadRequestException(
+        `Blood bank with name '${name}' already exists in this hospital`,
+      );
     }
 
-    return this.prisma.bloodBank.create({
+    const bloodBank = await this.prisma.bloodBank.create({
       data: {
         name,
         address,
-        hospital: { connect: { id: hospitalId } },
+        hospitalId,
         phoneNumber,
       },
       include: {
         hospital: true,
       },
     });
+
+    return bloodBank;
   }
 
   async getBloodBankById(id: string) {

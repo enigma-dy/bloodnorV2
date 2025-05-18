@@ -6,6 +6,7 @@ import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Response } from 'express';
+import { PrismaClientExceptionFilter } from './misc/prisma-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -46,7 +47,14 @@ async function bootstrap() {
     res.sendFile(join(__dirname, '..', 'public', 'docs.html'));
   });
 
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
+  app.useGlobalFilters(new PrismaClientExceptionFilter());
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();

@@ -10223,15 +10223,16 @@ export namespace Prisma {
 
   export type BloodBankWhereUniqueInput = Prisma.AtLeast<{
     id?: string
-    name?: string
+    name_hospitalId?: BloodBankNameHospitalIdCompoundUniqueInput
     AND?: BloodBankWhereInput | BloodBankWhereInput[]
     OR?: BloodBankWhereInput[]
     NOT?: BloodBankWhereInput | BloodBankWhereInput[]
+    name?: StringFilter<"BloodBank"> | string
     address?: StringFilter<"BloodBank"> | string
     hospitalId?: StringFilter<"BloodBank"> | string
     phoneNumber?: StringFilter<"BloodBank"> | string
     hospital?: XOR<HospitalScalarRelationFilter, HospitalWhereInput>
-  }, "id" | "name">
+  }, "id" | "name_hospitalId">
 
   export type BloodBankOrderByWithAggregationInput = {
     id?: SortOrder
@@ -11270,6 +11271,11 @@ export namespace Prisma {
   export type HospitalScalarRelationFilter = {
     is?: HospitalWhereInput
     isNot?: HospitalWhereInput
+  }
+
+  export type BloodBankNameHospitalIdCompoundUniqueInput = {
+    name: string
+    hospitalId: string
   }
 
   export type BloodBankCountOrderByAggregateInput = {
