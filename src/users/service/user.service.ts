@@ -142,7 +142,8 @@ export class UserService {
       const newUser = await this.prisma.user.create({
         data: data,
       });
-      return newUser;
+      const { id, email, firstName, lastName, phoneNumber } = newUser;
+      return { id, email, firstName, lastName, phoneNumber };
     } catch (error) {
       throw new BadRequestException('Invalid hospital ID provided');
     }
