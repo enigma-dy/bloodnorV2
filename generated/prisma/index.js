@@ -236,7 +236,7 @@ const config = {
     "db": {
       "url": {
         "fromEnvVar": "DATABASE_URL",
-        "value": "postgresql://postgres:admin@localhost:5432/blood-connect"
+        "value": "postgresql://postgres.xhbwbdtlrfwcnzsbwzts:pZ3hwuo9jic8Pybq@aws-0-eu-central-1.pooler.supabase.com:5432/postgres"
       }
     }
   },

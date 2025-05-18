@@ -18,7 +18,7 @@ CREATE TABLE "User" (
     "hospitalId" TEXT,
     "userType" "UserType" NOT NULL,
     "donationHistoy" TIMESTAMP(3)[],
-    "lastDonationDate" TIMESTAMP(3) NOT NULL,
+    "lastDonationDate" TIMESTAMP(3),
     "verificationToken" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -118,7 +118,7 @@ CREATE UNIQUE INDEX "Role_roleName_hospitalId_key" ON "Role"("roleName", "hospit
 CREATE UNIQUE INDEX "BloodGroup_bloodType_key" ON "BloodGroup"("bloodType");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "BloodBank_name_key" ON "BloodBank"("name");
+CREATE UNIQUE INDEX "BloodBank_name_hospitalId_key" ON "BloodBank"("name", "hospitalId");
 
 -- CreateIndex
 CREATE INDEX "_RoleToUser_B_index" ON "_RoleToUser"("B");
